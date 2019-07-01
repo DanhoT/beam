@@ -232,13 +232,6 @@ trait BeamHelper extends LazyLogging {
     )
 
     val networkCoordinator = buildNetworkCoordinator(beamConfig)
-    val transitSchedule = new TransitInitializer(
-      beamConfig,
-      dates,
-      vehicleTypes,
-      networkCoordinator.transportNetwork,
-      BeamRouter.oneSecondTravelTime
-    ).initMap
 
     BeamScenario(
       readFuelTypeFile(beamConfig.beam.agentsim.agents.vehicles.fuelTypesFilePath).toMap,
@@ -252,7 +245,6 @@ trait BeamHelper extends LazyLogging {
       dates,
       PtFares(beamConfig.beam.agentsim.agents.ptFare.filePath),
       networkCoordinator.transportNetwork,
-      transitSchedule,
       networkCoordinator.network,
       TAZTreeMap.getTazTreeMap(beamConfig.beam.agentsim.taz.filePath),
       ModeIncentive(beamConfig.beam.agentsim.agents.modeIncentive.filePath)
@@ -587,7 +579,7 @@ trait BeamHelper extends LazyLogging {
             val emptyScenario = ScenarioBuilder(matsimConfig).withNetwork(beamScenario.network).build
             val scenario = {
               val source = new BeamScenarioSource(
-                scenarioFolder = scenarioConfig.folder,
+                beamConfig,
                 rdr = readers.BeamCsvScenarioReader
               )
               new BeamScenarioLoader(emptyScenario, beamScenario, source, new GeoUtilsImpl(beamConfig)).loadScenario()
