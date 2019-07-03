@@ -13,14 +13,7 @@ import beam.agentsim.agents.vehicles.BeamVehicle.{BeamVehicleState, FuelConsumed
 import beam.agentsim.agents.vehicles.FuelType.{Electricity, Gasoline}
 import beam.agentsim.agents.vehicles.VehicleProtocol._
 import beam.agentsim.agents.vehicles._
-import beam.agentsim.events.{
-  ChargingPlugInEvent,
-  ChargingPlugOutEvent,
-  ParkEvent,
-  PathTraversalEvent,
-  RefuelSessionEvent,
-  SpaceTime
-}
+import beam.agentsim.events.{ChargingPlugInEvent, ChargingPlugOutEvent, ParkEvent, PathTraversalEvent, RefuelSessionEvent, SpaceTime}
 import beam.agentsim.infrastructure.ParkingStall
 import beam.agentsim.infrastructure.charging.ChargingInquiry
 import beam.agentsim.scheduler.BeamAgentScheduler.{CompletionNotice, ScheduleTrigger, SchedulerMessage}
@@ -32,15 +25,11 @@ import beam.router.model.BeamLeg
 import beam.router.osm.TollCalculator
 import beam.sim.BeamScenario
 import beam.sim.common.GeoUtils
-import beam.utils.NetworkHelper
+import beam.utils.reflection.ReflectionUtils
+import beam.utils.{LoggingUtil, NetworkHelper}
 import com.conveyal.r5.transit.TransportNetwork
 import org.matsim.api.core.v01.Id
-import org.matsim.api.core.v01.events.{
-  LinkEnterEvent,
-  LinkLeaveEvent,
-  VehicleEntersTrafficEvent,
-  VehicleLeavesTrafficEvent
-}
+import org.matsim.api.core.v01.events.{LinkEnterEvent, LinkLeaveEvent, VehicleEntersTrafficEvent, VehicleLeavesTrafficEvent}
 import org.matsim.api.core.v01.population.Person
 import org.matsim.core.api.experimental.events.EventsManager
 import org.matsim.vehicles.Vehicle
@@ -51,6 +40,8 @@ import scala.collection.mutable
   * @author dserdiuk on 7/29/17.
   */
 object DrivesVehicle {
+
+  case class DumpActorState(tick: Int)
 
   sealed trait VehicleOrToken {
     def id: Id[BeamVehicle]
@@ -609,6 +600,10 @@ trait DrivesVehicle[T <: DrivingData] extends BeamAgent[T] with Stash {
   }
 
   val drivingBehavior: StateFunction = {
+    case ev @ Event(r: DumpActorState, data) =>
+      // ReflectionUtils.logFields(log, this, 0)
+      log.error(s"Seems like agent ${self} stuck. Tick is ${r.tick}. State: \n\t" + getLog.mkString("\n\t"))
+      stay() using data
     case ev @ Event(req: ReservationRequest, data)
         if !hasRoomFor(
           data.passengerSchedule,

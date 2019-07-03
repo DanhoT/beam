@@ -7,12 +7,8 @@ import akka.actor.{Actor, ActorLogging, ActorRef, Cancellable, Props, Terminated
 import akka.event.LoggingReceive
 import akka.util.Timeout
 import beam.agentsim.agents.BeamAgent.Finish
-import beam.agentsim.agents.modalbehaviors.DrivesVehicle.EndRefuelSessionTrigger
-import beam.agentsim.agents.ridehail.RideHailManager.{
-  ContinueBufferedRideHailRequests,
-  RecoverFromStuckness,
-  RideHailRepositioningTrigger
-}
+import beam.agentsim.agents.modalbehaviors.DrivesVehicle.{DumpActorState, EndRefuelSessionTrigger}
+import beam.agentsim.agents.ridehail.RideHailManager.{ContinueBufferedRideHailRequests, RecoverFromStuckness, RideHailRepositioningTrigger}
 import beam.agentsim.scheduler.BeamAgentScheduler._
 import beam.agentsim.scheduler.Trigger.TriggerWithId
 import beam.sim.config.BeamConfig
@@ -280,7 +276,9 @@ class BeamAgentScheduler(
                   if ((tick == nowInSeconds && awaitingReponseSize == awaitingResponse
                     .size()) && (triggerQueueSize == triggerQueue.size() && triggerQueueHead == triggerQueue.peek())) =>
                 log.info("monitorStuckDetection removing agent: " + x.agent.path)
-                terminateActor(x.agent)
+
+                x.agent ! DumpActorState(nowInSeconds)
+                // terminateActor(x.agent)
 
               case _ =>
             }
