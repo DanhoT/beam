@@ -3,7 +3,7 @@ package beam.agentsim.agents.ridehail.allocation
 import java.io.{File, FileWriter}
 import java.util.Random
 
-import beam.agentsim.agents.ridehail.RideHailManager
+import beam.agentsim.agents.ridehail.{RideHailManager, RideHailRequest}
 import beam.analysis.plots.GraphsStatsAgentSimEventsListener
 import beam.router.BeamRouter.Location
 import beam.utils.{ActivitySegment, FileUtils, RandomUtils, Statistics}
@@ -32,6 +32,15 @@ class RandomRepositioning(val rideHailManager: RideHailManager)
       "RandomRepositioning need to have set `beam.agentsim.agents.rideHail.allocationManager.repositionTimeoutInSeconds` > 0!"
     )
   }
+
+  val allocMgr: String =
+    rideHailManager.beamServices.beamConfig.beam.agentsim.agents.rideHail.allocationManager.randomRepositioning.resourceAllocationManager
+
+  val maybeAllocMgr: Option[RideHailResourceAllocationManager] =
+    if (allocMgr.isEmpty) None
+    else {
+      Some(RideHailResourceAllocationManager.apply(allocMgr, rideHailManager))
+    }
 
   val avgFreeSpeed: Double = {
     val freeSpeeds = rideHailManager.beamServices.networkHelper.allLinks.map(_.getFreespeed).sorted
@@ -85,6 +94,8 @@ class RandomRepositioning(val rideHailManager: RideHailManager)
 
   val activitySegment: ActivitySegment =
     ActivitySegment(rideHailManager.beamServices.matsimServices.getScenario, intervalSize)
+
+  val algo8 = new Algo8Repos(rideHailManager.beamServices, activitySegment)
 
   val intervalForUpdatingQuadTree = 1800
 
@@ -195,6 +206,28 @@ class RandomRepositioning(val rideHailManager: RideHailManager)
     updatePersonActivityQuadTree(tick)
 
     algorithm match {
+      case 8 =>
+        val nonRepositioningIdleVehicles = rideHailManager.vehicleManager.getIdleVehicles.values.filter { ral =>
+          rideHailManager.modifyPassengerScheduleManager.isVehicleNeitherRepositioningNorProcessingReservation(
+            ral.vehicleId
+          )
+        }
+        if (nonRepositioningIdleVehicles.nonEmpty) {
+          val shouldRepos = nonRepositioningIdleVehicles.filter { rha =>
+            algo8.shouldReposition(tick, rha.vehicleId)
+          }
+          val newPositions = shouldRepos.flatMap { rha =>
+            algo8.findWhereToReposition(tick, rha.currentLocationUTM.loc, rha.vehicleId).map { loc =>
+              rha.vehicleId -> loc
+            }
+          }
+          logger.info(
+            s"nonRepositioningIdleVehicles: ${nonRepositioningIdleVehicles.size}, shouldRepos: ${shouldRepos.size}, newPositions: ${newPositions.size}"
+          )
+          newPositions.toVector
+        } else {
+          Vector.empty
+        }
 
       // TODO: destinations of idle vehicles selected for repositioning should be uniformally distributed in activity space
 
@@ -537,6 +570,23 @@ class RandomRepositioning(val rideHailManager: RideHailManager)
     // TODO: add initial rh location algorithm which is based on activity clusters over the day
     // don't consider last activity as no leg after that
 
+  }
+
+  override def respondToInquiry(inquiry: RideHailRequest): InquiryResponse = {
+    maybeAllocMgr match {
+      case Some(mgr) => mgr.respondToInquiry(inquiry)
+      case None      => super.respondToInquiry(inquiry)
+    }
+  }
+
+  override def allocateVehiclesToCustomers(
+    tick: Int,
+    vehicleAllocationRequest: AllocationRequests
+  ): AllocationResponse = {
+    maybeAllocMgr match {
+      case Some(mgr) => mgr.allocateVehiclesToCustomers(tick, vehicleAllocationRequest)
+      case None      => super.allocateVehiclesToCustomers(tick, vehicleAllocationRequest)
+    }
   }
 
   def showDistanceStats(result: Vector[(Id[Vehicle], Location)]): Unit = {
