@@ -3,6 +3,7 @@ package beam.agentsim.agents.ridehail.allocation
 import java.io.{File, FileWriter}
 import java.util.Random
 
+import beam.agentsim.agents.ridehail.repositioningmanager.DemandFollowingRepositioningManager
 import beam.agentsim.agents.ridehail.{RideHailManager, RideHailRequest}
 import beam.analysis.plots.GraphsStatsAgentSimEventsListener
 import beam.router.BeamRouter.Location
@@ -96,7 +97,7 @@ class RandomRepositioning(val rideHailManager: RideHailManager)
     ActivitySegment(rideHailManager.beamServices.matsimServices.getScenario, intervalSize)
 
   val algo8 = ProfilingUtils.timed("Initialized Algo8", x => logger.info(x)) {
-    new Algo8Repos(rideHailManager.beamServices, activitySegment)
+    new DemandFollowingRepositioningManager(rideHailManager.beamServices, rideHailManager)
   }
 
   val intervalForUpdatingQuadTree = 1800
@@ -206,38 +207,13 @@ class RandomRepositioning(val rideHailManager: RideHailManager)
 
     // Do tests: 1.) no repos 2.) with just upcomming next activities 3.) clustering, etc.
 
-    ProfilingUtils.timed("updatePersonActivityQuadTree", x => logger.info(x)) {
+    ProfilingUtils.timed("updatePersonActivityQuadTree", x => logger.debug(x)) {
       updatePersonActivityQuadTree(tick)
     }
 
     algorithm match {
       case 8 =>
-        val nonRepositioningIdleVehicles = rideHailManager.vehicleManager.getIdleVehicles.values.filter { ral =>
-          rideHailManager.modifyPassengerScheduleManager.isVehicleNeitherRepositioningNorProcessingReservation(
-            ral.vehicleId
-          )
-        }
-        if (nonRepositioningIdleVehicles.nonEmpty) {
-          val wantToRepos = ProfilingUtils.timed("Find who wants to reposition", x => logger.info(x)) {
-            nonRepositioningIdleVehicles.filter { rha =>
-              algo8.shouldReposition(tick, rha.vehicleId)
-            }
-          }
-          val newPositions = ProfilingUtils.timed(s"Find where to repos from ${wantToRepos.size}", x => logger.info(x)) {
-            wantToRepos.flatMap { rha =>
-              algo8.findWhereToReposition(tick, rha.currentLocationUTM.loc, rha.vehicleId).map { loc =>
-                rha.vehicleId -> loc
-              }
-            }
-          }
-          logger.info(
-            s"nonRepositioningIdleVehicles: ${nonRepositioningIdleVehicles.size}, wantToRepos: ${wantToRepos.size}, newPositions: ${newPositions.size}"
-          )
-          newPositions.toVector
-        } else {
-          Vector.empty
-        }
-
+        algo8.repositionVehicles(tick)
       // TODO: destinations of idle vehicles selected for repositioning should be uniformally distributed in activity space
 
       // This should perform the same as DEFAULT_MANAGER!!!
