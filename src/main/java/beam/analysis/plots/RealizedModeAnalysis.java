@@ -52,12 +52,28 @@ public class RealizedModeAnalysis extends BaseModeAnalysis {
 
     private final boolean writeGraph;
     private final StatsComputation<Tuple<Map<Integer, Map<String, Double>>, Set<String>>, double[][]> statComputation;
+    private final Map<String, String> modeToIntercept;
 
     public RealizedModeAnalysis(StatsComputation<Tuple<Map<Integer, Map<String, Double>>, Set<String>>, double[][]> statComputation, boolean writeGraph, BeamConfig beamConfig) {
         String benchMarkFileLocation = beamConfig.beam().calibration().mode().benchmarkFilePath();
         this.statComputation = statComputation;
         this.writeGraph = writeGraph;
         benchMarkData = benchMarkCSVLoader(benchMarkFileLocation);
+        this.modeToIntercept = getModeToInterceptMap(beamConfig);;
+    }
+
+    private Map<String, String> getModeToInterceptMap(BeamConfig beamConfig) {
+        Map<String, String> modeToIntercept = new HashMap<>();
+        modeToIntercept.put("bike", Double.toString(beamConfig.beam().agentsim().agents().modalBehaviors().mulitnomialLogit().params().bike_intercept()));
+        modeToIntercept.put("car", Double.toString(beamConfig.beam().agentsim().agents().modalBehaviors().mulitnomialLogit().params().car_intercept()));
+        modeToIntercept.put("cav", Double.toString(beamConfig.beam().agentsim().agents().modalBehaviors().mulitnomialLogit().params().cav_intercept()));
+        modeToIntercept.put("drive_transit", Double.toString(beamConfig.beam().agentsim().agents().modalBehaviors().mulitnomialLogit().params().drive_transit_intercept()));
+        modeToIntercept.put("ride_hail", Double.toString(beamConfig.beam().agentsim().agents().modalBehaviors().mulitnomialLogit().params().ride_hail_intercept()));
+        modeToIntercept.put("ride_hail_pooled", Double.toString(beamConfig.beam().agentsim().agents().modalBehaviors().mulitnomialLogit().params().ride_hail_pooled_intercept()));
+        modeToIntercept.put("ride_hail_transit", Double.toString(beamConfig.beam().agentsim().agents().modalBehaviors().mulitnomialLogit().params().ride_hail_transit_intercept()));
+        modeToIntercept.put("walk", Double.toString(beamConfig.beam().agentsim().agents().modalBehaviors().mulitnomialLogit().params().walk_intercept()));
+        modeToIntercept.put("walk_transit", Double.toString(beamConfig.beam().agentsim().agents().modalBehaviors().mulitnomialLogit().params().walk_transit_intercept()));
+        return modeToIntercept;
     }
 
     public static class RealizedModesStatsComputation implements StatsComputation<Tuple<Map<Integer, Map<String, Double>>, Set<String>>, double[][]> {
@@ -467,8 +483,15 @@ public class RealizedModeAnalysis extends BaseModeAnalysis {
         String fileName = GraphsStatsAgentSimEventsListener.CONTROLLER_IO.getOutputFilename("referenceRealizedModeChoice.csv");
         try (BufferedWriter out = new BufferedWriter(new FileWriter(new File(fileName)))) {
             Set<String> modes = cumulativeReferenceMode;
-            String heading = modes.stream().reduce((x, y) -> x + "," + y).orElse("");
-            out.write("iterations," + heading);
+            // String heading = modes.stream().reduce((x, y) -> String.format("%s[\"%s\"]", x, modeToIntercept.get(x))  + "," +  String.format("%s[\"%s\"]", y, modeToIntercept.get(y))).orElse("");
+            out.write("iterations,");
+            modes.forEach(mode -> {
+                try {
+                    out.write(String.format("%s_%s,", mode, modeToIntercept.get(mode)));
+                }
+                catch(IOException ex) {
+                }
+            });
             out.newLine();
 
             StringBuilder builder = new StringBuilder("benchmark");
