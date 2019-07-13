@@ -136,18 +136,19 @@ class RideHailFleetInitializer extends LazyLogging {
   def writeFleetData(beamServices: BeamServices, fleetData: Seq[RideHailAgentInputData]): Unit = {
     try {
       // Not sure this can even happen..
-      if (beamServices.matsimServices == null || beamServices.matsimServices.getControlerIO == null) return
+//      if (beamServices.matsimServices == null || beamServices.matsimServices.getControlerIO == null) return
       // If iteration directory doesn't exist, we are not in an iteration and shouldn't write anything
       // (Class is run on its own.)
       // (Normally, only ControlerListeners write things to the OutputDirectoryHierarchy.)
-      if (!new File(
-            beamServices.matsimServices.getControlerIO.getIterationPath(beamServices.matsimServices.getIterationNumber)
-          ).exists()) return
-      val filePath = beamServices.matsimServices.getControlerIO
-        .getIterationFilename(
-          beamServices.matsimServices.getIterationNumber,
-          RideHailFleetInitializer.outputFileBaseName + ".csv.gz"
-        )
+//      if (!new File(
+//            beamServices.matsimServices.getControlerIO.getIterationPath(beamServices.matsimServices.getIterationNumber)
+//          ).exists()) return
+      val filePath = "0.rideHailFleet.csv.gz"
+//        beamServices.matsimServices.getControlerIO
+//        .getIterationFilename(
+//          beamServices.matsimServices.getIterationNumber,
+//          RideHailFleetInitializer.outputFileBaseName + ".csv.gz"
+//        )
       val fileHeader = classOf[RideHailAgentInputData].getDeclaredFields.map(_.getName).mkString(", ")
       val data = fleetData map { f =>
         f.productIterator.map(
@@ -170,6 +171,43 @@ class RideHailFleetInitializer extends LazyLogging {
 }
 
 object RideHailFleetInitializer extends OutputDataDescriptor {
+
+  def main(args: Array[String]): Unit = {
+    val originalFleetFilePath = """D:\Work\beam\NewSeriesOfRuns\DemanFollowingRM\AMP-with-DFR-sensitivityOfRepositioningToDemand-0.4__2019-07-09_08-27-32\0.rideHailFleet.csv"""
+    val moved0PassengersFilePath = """D:\Work\beam\NewSeriesOfRuns\DemanFollowingRM\AMP-with-DFR-sensitivityOfRepositioningToDemand-0.4__2019-07-09_08-27-32\MovedWith0Passengers.csv"""
+    val movedAtLeast1PassengerFilePath = """D:\Work\beam\NewSeriesOfRuns\DemanFollowingRM\AMP-with-DFR-sensitivityOfRepositioningToDemand-0.4__2019-07-09_08-27-32\MovedWithAtLeast1Passenger.csv"""
+
+    val moved0Passengers: Set[String] = {
+      val s = Source.fromFile(moved0PassengersFilePath)
+      val res = s.getLines().toSet
+      s.close()
+      res
+    }
+
+    val movedAtLeast1Passenger: Set[String] = {
+      val s = Source.fromFile(movedAtLeast1PassengerFilePath)
+      val res = s.getLines().toSet
+      s.close()
+      res
+    }
+
+    val fleet = new RideHailFleetInitializer().readFleetFromCSV(originalFleetFilePath, null)
+    val allVehicleIds = fleet.map(_.id).toSet
+
+    val notMoved: Set[String] = allVehicleIds -- moved0Passengers -- movedAtLeast1Passenger
+
+    val excludeFromFleet = notMoved ++ moved0Passengers
+    val movedFleet = fleet.filter(r => !excludeFromFleet.contains(r.id))
+
+
+    new RideHailFleetInitializer().writeFleetData(null, movedFleet)
+
+
+    println(movedFleet)
+
+    println(fleet)
+  }
+
 
   val outputFileBaseName = "rideHailFleet"
 
