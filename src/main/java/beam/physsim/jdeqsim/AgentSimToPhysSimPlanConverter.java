@@ -47,6 +47,8 @@ import org.slf4j.LoggerFactory;
 import scala.Tuple2;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.ObjectOutputStream;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -190,6 +192,16 @@ public class AgentSimToPhysSimPlanConverter implements BasicEventHandler, Metric
         TravelTime travelTimes = travelTimeCalculator.getLinkTravelTimes();
         Map<String, double[]> map = TravelTimeCalculatorHelper.GetLinkIdToTravelTimeArray(links,
                 travelTimes, maxHour);
+
+        String travelTimePath = controlerIO.getIterationFilename(iterationNumber, "travelTime.bin");
+        try {
+            ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(travelTimePath));
+            out.writeObject(map);
+            out.close();
+        }
+        catch(Exception ex) {
+            log.error("Can't write travel time:", ex);
+        }
 
         TravelTime freeFlow = new FreeFlowTravelTime();
         int nBins = 0;

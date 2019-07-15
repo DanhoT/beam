@@ -537,8 +537,9 @@ trait BeamHelper extends LazyLogging {
     beamScenario: BeamScenario,
     outputDir: String
   ): Unit = {
-    samplePopulation(scenario, beamScenario, beamServices.beamConfig, scenario.getConfig, beamServices, outputDir)
-
+    if(!beamServices.beamConfig.beam.warmStart.enabled) {
+      samplePopulation(scenario, beamScenario, beamServices.beamConfig, scenario.getConfig, beamServices, outputDir)
+    }
     val houseHoldVehiclesInScenario: Iterable[Id[Vehicle]] = scenario.getHouseholds.getHouseholds
       .values()
       .asScala

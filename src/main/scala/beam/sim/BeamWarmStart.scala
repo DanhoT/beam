@@ -1,12 +1,11 @@
 package beam.sim
 
-import java.io.{File, FileNotFoundException}
+import java.io.{File, FileInputStream, FileNotFoundException, ObjectInputStream}
 import java.nio.file.{Files, Paths}
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorRef
 import beam.router.BeamRouter.{UpdateTravelTimeLocal, UpdateTravelTimeRemote}
-import beam.router.LinkTravelTimeContainer
 import beam.sim.config.{BeamConfig, BeamExecutionConfig}
 import beam.utils.FileUtils.downloadFile
 import beam.utils.TravelTimeCalculatorHelper
@@ -30,7 +29,7 @@ class BeamWarmStart private (beamConfig: BeamConfig, maxHour: Int) extends LazyL
   val srcPath = beamConfig.beam.warmStart.path
 
   def readTravelTime: Option[TravelTime] = {
-    getWarmStartFilePath("linkstats.csv.gz", rootFirst = false) match {
+    getWarmStartFilePath("travelTime.bin", rootFirst = false) match {
       case Some(statsPath) if isWarmMode =>
         if (Files.isRegularFile(Paths.get(statsPath))) {
           val travelTime = getTravelTime(statsPath)
@@ -183,10 +182,11 @@ class BeamWarmStart private (beamConfig: BeamConfig, maxHour: Int) extends LazyL
 
   private def getTravelTime(statsFile: String): TravelTime = {
     val binSize = beamConfig.beam.agentsim.timeBinSize
-
-    new LinkTravelTimeContainer(statsFile, binSize, maxHour)
+    val fis = new FileInputStream(new File(statsFile))
+    val ois = new ObjectInputStream(fis)
+    val map = ois.readObject().asInstanceOf[java.util.Map[String, Array[Double]]]
+    TravelTimeCalculatorHelper.CreateTravelTimeCalculator(binSize, map)
   }
-
 }
 
 object BeamWarmStart extends LazyLogging {
