@@ -4,6 +4,7 @@ import beam.agentsim.agents.{Dropoff, MobilityRequest, Pickup, Relocation}
 import beam.agentsim.agents.ridehail.RideHailManager.PoolingInfo
 import beam.agentsim.agents.ridehail.RideHailVehicleManager.RideHailAgentLocation
 import beam.agentsim.agents.ridehail.{RideHailManager, RideHailRequest}
+import beam.agentsim.agents.vehicles.PersonIdWithActorRef
 import beam.router.BeamRouter.{Location, RoutingRequest, RoutingResponse}
 import com.typesafe.scalalogging.LazyLogging
 import org.matsim.api.core.v01.Id
@@ -153,10 +154,15 @@ abstract class RideHailResourceAllocationManager(private val rideHailManager: Ri
           case Some(agentETA) =>
             alreadyAllocated = alreadyAllocated + agentETA.agentLocation.vehicleId
             val schedule = List(
-                MobilityRequest.simpleRequest(Relocation,Some(request.customer),routingResponses.head.itineraries.head.legs.headOption),
-                MobilityRequest.simpleRequest(Pickup,Some(request.customer),routingResponses.last.itineraries.head.legs.headOption),
-                MobilityRequest.simpleRequest(Dropoff,Some(request.customer),None)
-              )
+              MobilityRequest.simpleRequest(
+                Relocation,
+                Some(request.customer),
+                routingResponses.head.itineraries.head.legs.headOption
+              ),
+              MobilityRequest
+                .simpleRequest(Pickup, Some(request.customer), routingResponses.last.itineraries.head.legs.headOption),
+              MobilityRequest.simpleRequest(Dropoff, Some(request.customer), None)
+            )
             VehicleMatchedToCustomers(request, agentETA.agentLocation, schedule)
           case None =>
             NoVehicleAllocated(request)
@@ -263,9 +269,9 @@ case class NoVehicleAllocated(request: RideHailRequest) extends VehicleAllocatio
 case class RoutingRequiredToAllocateVehicle(request: RideHailRequest, routesRequired: List[RoutingRequest])
     extends VehicleAllocation
 case class VehicleMatchedToCustomers(
-                                      request: RideHailRequest,
-                                      rideHailAgentLocation: RideHailAgentLocation,
-                                      schedule: List[MobilityRequest]
+  request: RideHailRequest,
+  rideHailAgentLocation: RideHailAgentLocation,
+  schedule: List[MobilityRequest]
 ) extends VehicleAllocation
 
 case class AllocationRequests(requests: Map[RideHailRequest, List[RoutingResponse]])

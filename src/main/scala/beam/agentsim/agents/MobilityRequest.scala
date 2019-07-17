@@ -1,6 +1,6 @@
 package beam.agentsim.agents
 import beam.agentsim.agents.planning.{Tour, Trip}
-import beam.agentsim.agents.vehicles.VehiclePersonId
+import beam.agentsim.agents.vehicles.PersonIdWithActorRef
 import beam.router.Modes.BeamMode
 import beam.router.model.{BeamLeg, EmbodiedBeamLeg}
 import org.matsim.api.core.v01.Coord
@@ -15,17 +15,17 @@ case object EnRoute extends MobilityRequestType { override def toString: String 
 case object Init extends MobilityRequestType { override def toString: String = "init" }
 
 case class MobilityRequest(
-                            person: Option[VehiclePersonId],
-                            activity: Activity,
-                            baselineNonPooledTime: Int,
-                            trip: Trip,
-                            defaultMode: BeamMode,
-                            tag: MobilityRequestType,
-                            serviceTime: Int,
-                            pickupRequest: Option[MobilityRequest] = None,
-                            routingRequestId: Option[Int] = None,
-                            vehicleOccupancy: Option[Int] = None,
-                            beamLegAfterTag: Option[EmbodiedBeamLeg] = None // In other words, this leg is traversed **after** the action described in "tag" so if tag is a dropoff, we do the dropoff first then complete the beamLeg
+  person: Option[PersonIdWithActorRef],
+  activity: Activity,
+  baselineNonPooledTime: Int,
+  trip: Trip,
+  defaultMode: BeamMode,
+  tag: MobilityRequestType,
+  serviceTime: Int,
+  pickupRequest: Option[MobilityRequest] = None,
+  routingRequestId: Option[Int] = None,
+  vehicleOccupancy: Option[Int] = None,
+  beamLegAfterTag: Option[EmbodiedBeamLeg] = None // In other words, this leg is traversed **after** the action described in "tag" so if tag is a dropoff, we do the dropoff first then complete the beamLeg
 ) {
   val nextActivity = Some(trip.activity)
 
@@ -41,13 +41,38 @@ case class MobilityRequest(
       case None    => "None"
     }
 //    s"${formatTime(baselineNonPooledTime)}|$tag|${personid}|${activity.getType}| => ${formatTime(serviceTime)}"
-    s"${baselineNonPooledTime}|$tag|${personid}|${activity.getType}| => ${serviceTime}"
+    s"${baselineNonPooledTime}|$tag|${personid}|${activity.getCoord}| => ${serviceTime}"
+  }
+  override def equals(that: Any): Boolean = {
+    if (that.isInstanceOf[MobilityRequest]) {
+      val thatMobReq = that.asInstanceOf[MobilityRequest]
+      this.person == thatMobReq.person && this.baselineNonPooledTime == thatMobReq.baselineNonPooledTime && this.tag == thatMobReq.tag
+    } else {
+      false
+    }
   }
 }
 
-object MobilityRequest{
-  def simpleRequest(requestType: MobilityRequestType, person: Option[VehiclePersonId], leg: Option[EmbodiedBeamLeg]) = {
-    val act = PopulationUtils.createActivityFromCoord("",new Coord(-1,-1))
-    MobilityRequest(person, act, -1, new Trip(act, None, new Tour()), BeamMode.CAR, requestType, -1, None, None, None, leg )
+object MobilityRequest {
+
+  def simpleRequest(
+    requestType: MobilityRequestType,
+    person: Option[PersonIdWithActorRef],
+    leg: Option[EmbodiedBeamLeg]
+  ) = {
+    val act = PopulationUtils.createActivityFromCoord("", new Coord(-1, -1))
+    MobilityRequest(
+      person,
+      act,
+      -1,
+      new Trip(act, None, new Tour()),
+      BeamMode.CAR,
+      requestType,
+      -1,
+      None,
+      None,
+      None,
+      leg
+    )
   }
 }

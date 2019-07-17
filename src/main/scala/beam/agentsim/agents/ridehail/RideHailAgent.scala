@@ -1,7 +1,7 @@
 package beam.agentsim.agents.ridehail
 
 import akka.actor.FSM.Failure
-import akka.actor.{ActorRef, Props, Stash}
+import akka.actor.{ActorRef, Props, Stash, Status}
 import beam.agentsim.Resource.{NotifyVehicleIdle, NotifyVehicleOutOfService, ReleaseParkingStall}
 import beam.agentsim.agents.BeamAgent._
 import beam.agentsim.agents.PersonAgent._
@@ -17,7 +17,7 @@ import beam.agentsim.scheduler.Trigger.TriggerWithId
 import beam.router.model.{EmbodiedBeamLeg, EmbodiedBeamTrip}
 import beam.router.osm.TollCalculator
 import beam.sim.common.Range
-import beam.sim.{BeamServices, Geofence}
+import beam.sim.{BeamScenario, BeamServices, Geofence}
 import com.conveyal.r5.transit.TransportNetwork
 import org.matsim.api.core.v01.events.{PersonDepartureEvent, PersonEntersVehicleEvent}
 import org.matsim.api.core.v01.{Coord, Id}
@@ -29,6 +29,7 @@ object RideHailAgent {
 
   def props(
     services: BeamServices,
+    beamScenario: BeamScenario,
     scheduler: ActorRef,
     transportNetwork: TransportNetwork,
     tollCalculator: TollCalculator,
@@ -53,6 +54,7 @@ object RideHailAgent {
         eventsManager,
         parkingManager,
         services,
+        beamScenario,
         transportNetwork,
         tollCalculator
       )
@@ -149,11 +151,15 @@ class RideHailAgent(
   val eventsManager: EventsManager,
   val parkingManager: ActorRef,
   val beamServices: BeamServices,
+  val beamScenario: BeamScenario,
   val transportNetwork: TransportNetwork,
   val tollCalculator: TollCalculator
 ) extends BeamAgent[RideHailAgentData]
     with DrivesVehicle[RideHailAgentData]
     with Stash {
+
+  val networkHelper = beamServices.networkHelper
+  val geo = beamServices.geo
 
   val myUnhandled: StateFunction = {
     case Event(TriggerWithId(StartShiftTrigger(tick), triggerId), _) =>
@@ -170,6 +176,9 @@ class RideHailAgent(
 
     case ev @ Event(IllegalTriggerGoToError(reason), _) =>
       log.debug("state(RideHailingAgent.myUnhandled): {}", ev)
+      stop(Failure(reason))
+
+    case Event(Status.Failure(reason), _) =>
       stop(Failure(reason))
 
     case ev @ Event(Finish, _) =>
@@ -244,6 +253,9 @@ class RideHailAgent(
     case ev @ Event(Interrupt(interruptId: Id[Interrupt], tick), _) =>
       log.debug("state(RideHailingAgent.Offline): {}", ev)
       stay replying InterruptedWhileOffline(interruptId, vehicle.id, tick)
+    case ev @ Event(Resume(), _) =>
+      log.debug("state(RideHailingAgent.Offline): {}", ev)
+      stay
     case ev @ Event(
           reply @ NotifyVehicleResourceIdleReply(_, _),
           data
@@ -311,26 +323,76 @@ class RideHailAgent(
     case ev @ Event(ModifyPassengerSchedule(updatedPassengerSchedule, tick, requestId), data) =>
       log.debug("state(RideHailingAgent.IdleInterrupted): {}", ev)
       // This is a message from another agent, the ride-hailing manager. It is responsible for "keeping the trigger",
-      // i.e. for what time it is. For now, we just believe it that time is not running backwards.
-      log.debug("updating Passenger schedule - vehicleId({}): {}", id, updatedPassengerSchedule)
-      val triggerToSchedule = Vector(
-        ScheduleTrigger(
-          StartLegTrigger(
-            updatedPassengerSchedule.schedule.firstKey.startTime,
-            updatedPassengerSchedule.schedule.firstKey
-          ),
-          self
+      // i.e. for what time it is.
+      if (data.passengerSchedule.schedule.isEmpty) {
+        log.debug("updating Passenger schedule - vehicleId({}): {}", id, updatedPassengerSchedule)
+        val triggerToSchedule = Vector(
+          ScheduleTrigger(
+            StartLegTrigger(
+              updatedPassengerSchedule.schedule.firstKey.startTime,
+              updatedPassengerSchedule.schedule.firstKey
+            ),
+            self
+          )
         )
-      )
-      goto(WaitingToDriveInterrupted) using data
-        .copy(geofence = geofence)
-        .withPassengerSchedule(updatedPassengerSchedule)
-        .asInstanceOf[RideHailAgentData] replying ModifyPassengerScheduleAck(
-        requestId,
-        triggerToSchedule,
-        vehicle.id,
-        tick,
-      )
+        goto(WaitingToDriveInterrupted) using data
+          .copy(geofence = geofence)
+          .withPassengerSchedule(updatedPassengerSchedule)
+          .asInstanceOf[RideHailAgentData] replying ModifyPassengerScheduleAck(
+          requestId,
+          triggerToSchedule,
+          vehicle.id,
+          tick,
+        )
+      } else {
+        log.debug(
+          "merging existing passenger schedule with updated - vehicleId({}), existing: {}, updated: {}",
+          id,
+          data.passengerSchedule,
+          updatedPassengerSchedule
+        )
+        val currentLeg = data.passengerSchedule.schedule.view.drop(data.currentLegPassengerScheduleIndex).head._1
+        val updatedStopTime = math.max(currentLeg.startTime, tick)
+        val resolvedPassengerSchedule: PassengerSchedule = DrivesVehicle.resolvePassengerScheduleConflicts(
+          updatedStopTime,
+          data.passengerSchedule,
+          updatedPassengerSchedule,
+          beamServices.networkHelper,
+          beamServices.geo
+        )
+        val newLegIndex = resolvedPassengerSchedule.schedule.keys.zipWithIndex
+          .find(_._1.startTime <= updatedStopTime)
+          .map(_._2)
+          .getOrElse(0)
+        if (newLegIndex >= resolvedPassengerSchedule.schedule.size) {
+          val i = 0
+        }
+        val newNextLeg = resolvedPassengerSchedule.schedule.keys.toIndexedSeq(newLegIndex)
+
+        if (resolvedPassengerSchedule.schedule.values.exists(_.riders.size == 6)) {
+          val i = 0
+        }
+
+        val triggerToSchedule = Vector(
+          ScheduleTrigger(
+            StartLegTrigger(
+              newNextLeg.startTime,
+              newNextLeg
+            ),
+            self
+          )
+        )
+        goto(WaitingToDriveInterrupted) using data
+          .copy(geofence = geofence)
+          .withPassengerSchedule(resolvedPassengerSchedule)
+          .withCurrentLegPassengerScheduleIndex(newLegIndex)
+          .asInstanceOf[RideHailAgentData] replying ModifyPassengerScheduleAck(
+          requestId,
+          triggerToSchedule,
+          vehicle.id,
+          tick,
+        )
+      }
     case ev @ Event(Resume(), _) =>
       log.debug("state(RideHailingAgent.IdleInterrupted): {}", ev)
       goto(Idle)
