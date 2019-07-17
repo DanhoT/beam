@@ -39,6 +39,7 @@ import scala.collection.mutable
   * @author dserdiuk on 7/29/17.
   */
 object DrivesVehicle {
+  case class DumpActorState(tick: Int)
 
   sealed trait VehicleOrToken {
     def id: Id[BeamVehicle]
@@ -509,6 +510,11 @@ trait DrivesVehicle[T <: DrivingData] extends BeamAgent[T] with HasServices with
   }
 
   val drivingBehavior: StateFunction = {
+    case ev @ Event(r: DumpActorState, data) =>
+      // ReflectionUtils.logFields(log, this, 0)
+      log.error(s"Seems like agent ${self} stuck. Tick is ${r.tick}. State: \n\t" + getLog.mkString("\n\t"))
+      stay() using data
+
     case ev @ Event(req: ReservationRequest, data)
         if !hasRoomFor(
           data.passengerSchedule,
