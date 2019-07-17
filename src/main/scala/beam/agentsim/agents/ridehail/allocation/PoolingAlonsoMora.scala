@@ -163,7 +163,7 @@ class PoolingAlonsoMora(val rideHailManager: RideHailManager)
       val algo = new AsyncAlonsoMoraAlgForRideHail(
         spatialPoolCustomerReqs,
         if(availVehicles.find(_.getFreeSeats <4).isDefined){ availVehicles.filter(_.getFreeSeats <4).toList}else{availVehicles.toList},
-        Map[MobilityRequestType, Int]((Pickup, pickupWindow), (Dropoff, dropoffWindow),(EnRoute,Int.MaxValue-30000000)),
+        Map[MobilityRequestType, Int]((Pickup, pickupWindow), (Dropoff, dropoffWindow),(EnRoute,Int.MaxValue-30000000),(Relocation,Int.MaxValue-30000000)),
         maxRequestsPerVehicle = maxRequests,
         rideHailManager.beamServices
       )
