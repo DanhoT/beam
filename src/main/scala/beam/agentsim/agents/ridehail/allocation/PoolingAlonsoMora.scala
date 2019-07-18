@@ -138,7 +138,7 @@ class PoolingAlonsoMora(val rideHailManager: RideHailManager)
                   veh,
                   tick + rideHailManager.beamServices.beamConfig.beam.agentsim.schedulerParallelismWindow,
                   rideHailManager.beamServices
-                )
+              )
             )
             .toList,
           pooledAllocationReqs.map(
@@ -148,7 +148,7 @@ class PoolingAlonsoMora(val rideHailManager: RideHailManager)
                 rhr.pickUpLocationUTM,
                 tick + rideHailManager.beamServices.beamConfig.beam.agentsim.schedulerParallelismWindow,
                 rhr.destinationUTM
-              )
+            )
           ),
           rideHailManager.beamServices.beamConfig.beam.agentsim.schedulerParallelismWindow
         )
@@ -205,7 +205,7 @@ class PoolingAlonsoMora(val rideHailManager: RideHailManager)
       val dropoffWindow =
         rideHailManager.beamServices.beamConfig.beam.agentsim.agents.rideHail.allocationManager.alonsoMora.dropoffTimeWindowInSec
 
-      rideHailManager.log.info("%%%%% Num avail: {}",availVehicles.size)
+      rideHailManager.log.info("%%%%% Num avail: {}", availVehicles.size)
       //      rideHailManager.log.info("Num custs: {} num vehs: {}", spatialPoolCustomerReqs.size(), availVehicles.size)
       val algo = new AsyncAlonsoMoraAlgForRideHail(
         spatialPoolCustomerReqs,

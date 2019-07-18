@@ -27,7 +27,6 @@ class RideHailModifyPassengerScheduleManager(
   val beamConfig: BeamConfig
 ) extends HasTickAndTrigger {
 
-
   private val interruptIdToModifyPassengerScheduleStatus =
     mutable.Map[Id[Interrupt], RideHailModifyPassengerScheduleStatus]()
   private val vehicleIdToModifyPassengerScheduleStatus =
@@ -214,7 +213,10 @@ class RideHailModifyPassengerScheduleManager(
           case _ =>
             // Success! Continue with modify process
             sendModifyPassengerScheduleMessage(
-              status.copy(modifyPassengerSchedule = status.modifyPassengerSchedule.copy(updatedPassengerSchedule = passengerSchedule,reservationRequestId = reservationRequestIdOpt)),
+              status.copy(
+                modifyPassengerSchedule = status.modifyPassengerSchedule
+                  .copy(updatedPassengerSchedule = passengerSchedule, reservationRequestId = reservationRequestIdOpt)
+              ),
               reply.isInstanceOf[InterruptedWhileDriving]
             )
         }
@@ -250,7 +252,9 @@ class RideHailModifyPassengerScheduleManager(
         rideHailAgent,
         InterruptSent
       )
-      log.debug("RideHailModifyPassengerScheduleManager- sendInterrupt:  " + rideHailModifyPassengerScheduleStatus.interruptId)
+      log.debug(
+        "RideHailModifyPassengerScheduleManager- sendInterrupt:  " + rideHailModifyPassengerScheduleStatus.interruptId
+      )
       saveModifyStatusInCache(rideHailModifyPassengerScheduleStatus)
       sendInterruptMessage(rideHailModifyPassengerScheduleStatus)
     } else {
@@ -276,7 +280,7 @@ class RideHailModifyPassengerScheduleManager(
   }
 
   def cleanUpCaches = {
-    interruptIdToModifyPassengerScheduleStatus.values.foreach{ status =>
+    interruptIdToModifyPassengerScheduleStatus.values.foreach { status =>
       status.rideHailAgent.tell(Resume(), rideHailManagerRef)
     }
     vehicleIdToModifyPassengerScheduleStatus.clear
@@ -286,13 +290,13 @@ class RideHailModifyPassengerScheduleManager(
   def clearModifyStatusFromCacheWithVehicleId(vehicleId: Id[Vehicle]): Unit = {
     vehicleIdToModifyPassengerScheduleStatus.remove(vehicleId).foreach { status =>
       interruptIdToModifyPassengerScheduleStatus.remove(status.interruptId)
-      log.debug("remove interrupt from clearModifyStatusFromCacheWithVehicleId {}",status.interruptId)
+      log.debug("remove interrupt from clearModifyStatusFromCacheWithVehicleId {}", status.interruptId)
     }
   }
   private def clearModifyStatusFromCacheWithInterruptId(
     interruptId: Id[Interrupt]
   ): Unit = {
-    log.debug("remove interrupt froclearModifyStatusFromCacheWithInterruptId {}",interruptId)
+    log.debug("remove interrupt froclearModifyStatusFromCacheWithInterruptId {}", interruptId)
     interruptIdToModifyPassengerScheduleStatus.remove(interruptId).foreach { rideHailModifyPassengerScheduleStatus =>
       vehicleIdToModifyPassengerScheduleStatus.remove(rideHailModifyPassengerScheduleStatus.vehicleId)
     }
