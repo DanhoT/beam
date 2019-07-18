@@ -96,7 +96,7 @@ class R5RoutingWorker(workerParams: WorkerParameters) extends Actor with ActorLo
       val geo = new GeoUtilsImpl(beamConfig)
       val vehicleTypes = readBeamVehicleTypeFile(beamConfig.beam.agentsim.agents.vehicles.vehicleTypesFilePath)
       val fuelTypePrices = readFuelTypeFile(beamConfig.beam.agentsim.agents.vehicles.fuelTypesFilePath).toMap
-      val ptFares = PtFares(beamConfig.beam.agentsim.agents.ptFare.filePath)
+      val ptFares = PtFares(beamConfig.beam.agentsim.agents.ptFare.filePathPath)
       val fareCalculator = new FareCalculator(beamConfig)
       val tollCalculator = new TollCalculator(beamConfig)
       // TODO FIX ME

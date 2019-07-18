@@ -518,7 +518,7 @@ class RideHailManager(
     case NotifyVehicleOutOfService(vehicleId) =>
       vehicleManager.putOutOfService(vehicleManager.getRideHailAgentLocation(vehicleId))
 
-    case NotifyVehicleIdle(_,_,_,_,_,_) if currentlyProcessingTimeoutTrigger.isDefined =>
+    case NotifyVehicleIdle(_, _, _, _, _, _) if currentlyProcessingTimeoutTrigger.isDefined =>
       // To avoid complexity, we don't add any new vehicles to the Idle list when we are in the middle of dispatch or repositioning
       stash()
 
@@ -787,7 +787,13 @@ class RideHailManager(
           findAllocationsAndProcess(tick)
       }
 
-    case reply @ InterruptedWhileDriving(interruptId, vehicleId, tick, interruptedPassengerSchedule, currentPassengerScheduleIndex) =>
+    case reply @ InterruptedWhileDriving(
+          interruptId,
+          vehicleId,
+          tick,
+          interruptedPassengerSchedule,
+          currentPassengerScheduleIndex
+        ) =>
       if (pendingAgentsSentToPark.contains(vehicleId)) {
         log.error(
           "It is not expected in the current implementation that a moving vehicle would be stopped and sent for charging"
@@ -796,8 +802,12 @@ class RideHailManager(
         modifyPassengerScheduleManager.handleInterruptReply(reply)
         // Update with latest passenger schedule
         vehicleManager.putIntoService(
-          vehicleManager.getRideHailAgentLocation(vehicleId)
-            .copy(currentPassengerSchedule = Some(reply.passengerSchedule), currentPassengerScheduleIndex = Some(currentPassengerScheduleIndex))
+          vehicleManager
+            .getRideHailAgentLocation(vehicleId)
+            .copy(
+              currentPassengerSchedule = Some(reply.passengerSchedule),
+              currentPassengerScheduleIndex = Some(currentPassengerScheduleIndex)
+            )
         )
         if (currentlyProcessingTimeoutTrigger.isDefined && modifyPassengerScheduleManager.allInterruptConfirmationsReceived)
           findAllocationsAndProcess(tick)
@@ -1112,7 +1122,7 @@ class RideHailManager(
         sender() ! RideHailResponse.dummyWithError(RideHailVehicleTakenError)
     }
     if (processBufferedRequestsOnTimeout && currentlyProcessingTimeoutTrigger.isDefined) {
-      if (pendingModifyPassengerScheduleAcks.isEmpty)cleanUpBufferedRequestProcessing(tick)
+      if (pendingModifyPassengerScheduleAcks.isEmpty) cleanUpBufferedRequestProcessing(tick)
     }
   }
 
