@@ -40,6 +40,7 @@ import scala.collection.mutable
   * DrivesVehicle
   */
 object DrivesVehicle {
+  case class DumpActorState(tick: Int)
 
   def resolvePassengerScheduleConflicts(
     stopTick: Int,
@@ -606,6 +607,11 @@ trait DrivesVehicle[T <: DrivingData] extends BeamAgent[T] with Stash {
   }
 
   val drivingBehavior: StateFunction = {
+    case ev @ Event(r: DumpActorState, data) =>
+      // ReflectionUtils.logFields(log, this, 0)
+      log.error(s"Seems like agent ${self} stuck. Tick is ${r.tick}. State: \n\t" + getLog.mkString("\n\t"))
+      stay() using data
+
     case ev @ Event(req: ReservationRequest, data)
         if !hasRoomFor(
           data.passengerSchedule,
