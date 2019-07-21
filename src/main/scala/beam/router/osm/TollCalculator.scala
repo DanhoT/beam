@@ -25,7 +25,7 @@ class TollCalculator @Inject()(val config: BeamConfig) extends LazyLogging {
   import beam.utils.FileUtils._
 
   private val tollsByLinkId: TIntObjectHashMap[Array[Toll]] = {
-    val map: util.Map[Int, Array[Toll]] = readTollPrices(config.beam.agentsim.toll.filePathPath)
+    val map: util.Map[Int, Array[Toll]] = readTollPrices(config.beam.agentsim.toll.filePath)
     val intHashMap = new TIntObjectHashMap[Array[Toll]]()
     map.asScala.foreach {
       case (k, v) =>
