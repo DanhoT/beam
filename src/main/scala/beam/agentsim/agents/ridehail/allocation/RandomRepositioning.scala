@@ -3,11 +3,12 @@ package beam.agentsim.agents.ridehail.allocation
 import java.io.{File, FileWriter}
 import java.util.Random
 
+import beam.agentsim.agents.ridehail.RideHailManager
 import beam.agentsim.agents.ridehail.repositioningmanager.DemandFollowingRepositioningManager
-import beam.agentsim.agents.ridehail.{RideHailManager, RideHailRequest}
 import beam.analysis.plots.GraphsStatsAgentSimEventsListener
 import beam.router.BeamRouter.Location
-import beam.utils.{ActivitySegment, FileUtils, ProfilingUtils, RandomUtils, Statistics}
+import beam.sim.RideHailState
+import beam.utils._
 import com.typesafe.scalalogging.LazyLogging
 import org.matsim.api.core.v01.population.Activity
 import org.matsim.api.core.v01.{Coord, Id}
@@ -25,6 +26,7 @@ object RandomRepositioning {
   val COORD_OUTPUT_FILE = "coord_output.csv"
 }
 
+// Leaving this class here just for the historical purpose to show what we tried. Currently it is not used.
 class RandomRepositioning(val rideHailManager: RideHailManager)
     extends RideHailResourceAllocationManager(rideHailManager)
     with LazyLogging {
@@ -50,7 +52,9 @@ class RandomRepositioning(val rideHailManager: RideHailManager)
 
   val algorithm = 1
 
-  val rhs = rideHailManager.beamServices.rideHailState
+  // Algorithm #6 needs the state of ride-hail vehicles from previous iteration. It was stored in `RideHailState` and accessed from BeamServices, but it is removed now
+  // If you want to make it work, bring that change back :)
+  val rhs = new RideHailState // This should be replaces with actual data from prev iteration
 
   val vehicleAllowedToReposition: mutable.Set[Id[Vehicle]] = {
     mutable.HashSet(

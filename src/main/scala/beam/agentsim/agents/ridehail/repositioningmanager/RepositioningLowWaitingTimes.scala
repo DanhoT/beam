@@ -1,9 +1,8 @@
 package beam.agentsim.agents.ridehail.repositioningmanager
 
 import java.awt.Color
-import java.util.concurrent.TimeUnit
+import java.util
 
-import akka.util.Timeout
 import beam.agentsim.agents.ridehail.RideHailManager
 import beam.agentsim.agents.ridehail.RideHailVehicleManager.RideHailAgentLocation
 import beam.router.BeamRouter.Location
@@ -11,12 +10,18 @@ import beam.sim.BeamServices
 import beam.utils._
 import com.typesafe.scalalogging.LazyLogging
 import org.matsim.api.core.v01.{Coord, Id}
+import org.matsim.core.utils.io.IOUtils
 import org.matsim.vehicles.Vehicle
+import org.supercsv.io.CsvMapWriter
+import org.supercsv.prefs.CsvPreference
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
+import scala.util.Try
 
 class RepositioningLowWaitingTimes(val beamServices: BeamServices, val rideHailManager: RideHailManager)
     extends RepositioningManager(beamServices, rideHailManager)
     with LazyLogging {
-  implicit val timeout: Timeout = Timeout(50000, TimeUnit.SECONDS)
 
   // Only override proposeVehicleAllocation if you wish to do something different from closest euclidean vehicle
   //  override def proposeVehicleAllocation(vehicleAllocationRequest: VehicleAllocationRequest): VehicleAllocationResponse
@@ -49,6 +54,67 @@ class RepositioningLowWaitingTimes(val beamServices: BeamServices, val rideHailM
   val minDemandPercentageInRadius =
     repositioningConfig.minDemandPercentageInRadius
 
+  val repoVehStateCsvWriter: CsvMapWriter = new CsvMapWriter(
+    IOUtils.getBufferedWriter(
+      beamServices.matsimServices.getControlerIO
+        .getIterationFilename(beamServices.matsimServices.getIterationNumber, "repos_veh_state.csv")
+    ),
+    CsvPreference.STANDARD_PREFERENCE
+  )
+
+  val repoVehStateHeaders = Array(
+    "tick",
+    "vehicle_id",
+    "x",
+    "y",
+    "is_selected_to_reposition",
+    "idle_score",
+    "is_top",
+    "new_x",
+    "new_y",
+    "maxNumberOfVehiclesToReposition",
+    "minimumNumberOfIdlingVehiclesThresholdForRepositioning",
+    "repositionCircleRadiusInMeters"
+  )
+  repoVehStateCsvWriter.writeHeader(repoVehStateHeaders: _*)
+  repoVehStateCsvWriter.flush()
+
+  val tazStateCsvWriter = new CsvMapWriter(
+    IOUtils.getBufferedWriter(
+      beamServices.matsimServices.getControlerIO
+        .getIterationFilename(beamServices.matsimServices.getIterationNumber, "taz_state.csv")
+    ),
+    CsvPreference.STANDARD_PREFERENCE
+  )
+
+  val tazStateHeaders = Array(
+    "tick",
+    "taz_id",
+    "is_top_scored",
+    "num_of_taz_in_radius",
+    "repositionCircleRadiusInMeters",
+    "taz_in_radius",
+    "distance_in_meters",
+    "distance_weight",
+    "distance_score",
+    "startTimeBin",
+    "endTimeBin",
+    "bin",
+    "sumOfWaitingTimes",
+    "waiting_time_score",
+    "getDemandEstimate",
+    "demand_score",
+    "bin_score",
+    "final_score",
+  )
+  tazStateCsvWriter.writeHeader(tazStateHeaders: _*)
+  tazStateCsvWriter.flush()
+
+  override def clear(): Unit = {
+    Try(repoVehStateCsvWriter.close())
+    Try(tazStateCsvWriter.close())
+  }
+
   override def repositionVehicles(tick: Int): Vector[(Id[Vehicle], Location)] = {
 
     rideHailManager.tncIterationStats match {
@@ -72,19 +138,41 @@ class RepositioningLowWaitingTimes(val beamServices: BeamServices, val rideHailM
           )
         }
 
-        var vehiclesToReposition =
+        val allVehiclesToReposition =
           filterOutAlreadyRepositioningVehiclesIfEnoughAlternativeIdleVehiclesAvailable(
             idleVehicles,
             minimumNumberOfIdlingVehiclesThresholdForRepositioning
           )
 
-        vehiclesToReposition = tncIterStats.getVehiclesCloseToIdlingAreas(
-          vehiclesToReposition,
+        val allVehStates = new util.HashMap[String, util.HashMap[String, String]]()
+        allVehiclesToReposition.foreach { rha =>
+          val vehState = new util.HashMap[String, String]
+          vehState.put("tick", tick.toString)
+          vehState.put("vehicle_id", rha.vehicleId.toString)
+          vehState.put("x", rha.currentLocationUTM.loc.getX.toString)
+          vehState.put("y", rha.currentLocationUTM.loc.getY.toString)
+          vehState.put("is_selected_to_reposition", "0")
+          vehState.put("idle_score", "-1")
+          vehState.put("is_top", "0")
+          vehState.put("new_x", Double.NaN.toString)
+          vehState.put("new_y", Double.NaN.toString)
+          // Last fields
+          vehState.put("maxNumberOfVehiclesToReposition", maxNumberOfVehiclesToReposition.toString)
+          vehState.put(
+            "minimumNumberOfIdlingVehiclesThresholdForRepositioning",
+            minimumNumberOfIdlingVehiclesThresholdForRepositioning.toString
+          )
+          allVehStates.put(rha.vehicleId.toString, vehState)
+        }
+
+        val vehiclesToReposition = tncIterStats.getVehiclesCloseToIdlingAreas(
+          allVehiclesToReposition,
           maxNumberOfVehiclesToReposition,
           tick,
           timeWindowSizeInSecForDecidingAboutRepositioning,
           minimumNumberOfIdlingVehiclesThresholdForRepositioning,
-          rideHailManager.beamServices
+          rideHailManager.beamServices,
+          allVehStates
         )
 
         repositionCircleRadiusInMeters = tncIterStats.getUpdatedCircleSize(
@@ -109,15 +197,40 @@ class RepositioningLowWaitingTimes(val beamServices: BeamServices, val rideHailM
 
         // add keepMaxTopNScores (TODO)
 
+        val allTazState: util.HashMap[String, ArrayBuffer[util.HashMap[String, String]]] = new util.HashMap[String, ArrayBuffer[util.HashMap[String, String]]]()
+
         val whichTAZToRepositionTo: Vector[(Id[Vehicle], Location)] =
           tncIterStats.reposition(
             vehiclesToReposition,
             repositionCircleRadiusInMeters,
             tick,
             timeWindowSizeInSecForDecidingAboutRepositioning,
-            rideHailManager.beamServices
+            rideHailManager.beamServices,
+            allTazState
           )
+
+        allTazState.asScala.foreach { case (_, maps) =>
+          maps.foreach { map =>
+            tazStateCsvWriter.write(map, tazStateHeaders: _*)
+          }
+        }
+        tazStateCsvWriter.flush()
+
         //}
+
+        whichTAZToRepositionTo.foreach {
+          case (v, loc) =>
+            allVehStates.get(v.toString).put("is_selected_to_reposition", "1")
+            allVehStates.get(v.toString).put("new_x", loc.getX.toString)
+            allVehStates.get(v.toString).put("new_y", loc.getY.toString)
+        }
+
+        allVehStates.asScala.foreach {
+          case (vehId, map) =>
+            allVehStates.get(vehId).put("repositionCircleRadiusInMeters", repositionCircleRadiusInMeters.toString)
+            repoVehStateCsvWriter.write(map, repoVehStateHeaders: _*)
+        }
+        repoVehStateCsvWriter.flush()
 
         val produceDebugImages = repositioningConfig.produceDebugImages
         if (produceDebugImages && whichTAZToRepositionTo.nonEmpty) {

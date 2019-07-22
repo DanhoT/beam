@@ -483,6 +483,9 @@ class RideHailManager(
     log.info(s"servedRideHail: $servedRideHail")
     log.info(s"ratio: ${servedRideHail.toDouble / requestedRideHail}")
     maybeTick.foreach(_.cancel())
+
+    rideHailResourceAllocationManager.repositioningManager.clear()
+
     super.postStop()
   }
 
@@ -1559,7 +1562,7 @@ class RideHailManager(
     } else {
       val outArray = scala.collection.mutable.ArrayBuffer.empty[String]
       Array((startTimes zip endTimes).foreach(x => outArray += Array("{", x._1, ":", x._2, "}").mkString))
-      return Option(outArray.mkString(";"))
+      Option(outArray.mkString(";"))
     }
   }
 }
