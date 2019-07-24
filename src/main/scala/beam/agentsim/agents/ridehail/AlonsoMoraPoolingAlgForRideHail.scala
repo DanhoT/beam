@@ -59,8 +59,8 @@ class AlonsoMoraPoolingAlgForRideHail(
       v: VehicleAndSchedule <- supply.withFilter(_.getFreeSeats >= 1)
       r: CustomerRequest <- spatialDemand
         .getDisk(
-          v.getLastDropoff.activity.getCoord.getX,
-          v.getLastDropoff.activity.getCoord.getY,
+          v.getRequestWithCurrentVehiclePosition.activity.getCoord.getX,
+          v.getRequestWithCurrentVehiclePosition.activity.getCoord.getY,
           timeWindow(Pickup) * BeamSkimmer.speedMeterPerSec(BeamMode.CAV)
         )
         .asScala
@@ -203,7 +203,7 @@ object AlonsoMoraPoolingAlgForRideHail {
     skimmer.getTimeDistanceAndCost(
       src.activity.getCoord,
       dst.activity.getCoord,
-      src.time,
+      src.baselineNonPooledTime,
       BeamMode.CAR,
       Id.create(
         skimmer.beamScenario.beamConfig.beam.agentsim.agents.rideHail.initialization.procedural.vehicleTypeId,
@@ -219,14 +219,18 @@ object AlonsoMoraPoolingAlgForRideHail {
   )(
     implicit skimmer: BeamSkimmer
   ): Option[List[MobilityRequest]] = {
-    val sortedRequests = requests.sortWith(_.time < _.time)
+    val sortedRequests = requests.sortWith(_.baselineNonPooledTime < _.baselineNonPooledTime)
     import scala.collection.mutable.{ListBuffer => MListBuffer}
     val newPoolingList = MListBuffer(sortedRequests.head.copy())
-    sortedRequests.drop(1).foldLeft(()) {
-      case (_, curReq) =>
+    sortedRequests.drop(1).foreach { curReq =>
         val prevReq = newPoolingList.last
-        val serviceTime = prevReq.serviceTime + getTimeDistanceAndCost(prevReq, curReq, beamServices).time
-        if (serviceTime <= curReq.time + timeWindow(curReq.tag)) {
+        val travelTime = getTimeDistanceAndCost(prevReq, curReq, beamServices).time
+        val serviceTime = prevReq.serviceTime + travelTime
+        val delay = curReq.tag match {
+          case Dropoff => timeWindow(Pickup) + timeWindow(Dropoff) * travelTime
+          case _ => timeWindow(curReq.tag)
+        }
+        if (serviceTime <= curReq.baselineNonPooledTime + delay) {
           newPoolingList.append(curReq.copy(serviceTime = serviceTime))
         } else {
           return None
@@ -235,17 +239,17 @@ object AlonsoMoraPoolingAlgForRideHail {
     Some(newPoolingList.toList)
   }
 
-  def createPersonRequest(vehiclePersonId: PersonIdWithActorRef, src: Location, srcTime: Int, dst: Location)(
+  def createPersonRequest(vehiclePersonId: PersonIdWithActorRef, src: Location, departureTime: Int, dst: Location)(
     implicit skimmer: BeamSkimmer
   ): CustomerRequest = {
     val p1Act1: Activity = PopulationUtils.createActivityFromCoord(s"${vehiclePersonId.personId}Act1", src)
-    p1Act1.setEndTime(srcTime)
+    p1Act1.setEndTime(departureTime)
     val p1Act2: Activity = PopulationUtils.createActivityFromCoord(s"${vehiclePersonId.personId}Act2", dst)
     val p1_tt: Int = skimmer
       .getTimeDistanceAndCost(
         p1Act1.getCoord,
         p1Act2.getCoord,
-        0,
+        departureTime,
         BeamMode.CAR,
         Id.create(
           skimmer.beamScenario.beamConfig.beam.agentsim.agents.rideHail.initialization.procedural.vehicleTypeId,
@@ -258,20 +262,20 @@ object AlonsoMoraPoolingAlgForRideHail {
       MobilityRequest(
         Some(vehiclePersonId),
         p1Act1,
-        srcTime,
+        departureTime,
         Trip(p1Act1, None, null),
         BeamMode.RIDE_HAIL,
         Pickup,
-        srcTime
+        departureTime
       ),
       MobilityRequest(
         Some(vehiclePersonId),
         p1Act2,
-        srcTime + p1_tt,
+        departureTime + p1_tt,
         Trip(p1Act2, None, null),
         BeamMode.RIDE_HAIL,
         Dropoff,
-        srcTime + p1_tt
+        departureTime + p1_tt
       ),
     )
   }
@@ -303,7 +307,8 @@ object AlonsoMoraPoolingAlgForRideHail {
           dstTime
         )
       ),
-      geofence
+      geofence,
+      vehicleType.seatingCapacity
     )
 
   }
@@ -318,22 +323,29 @@ object AlonsoMoraPoolingAlgForRideHail {
   case class CustomerRequest(person: PersonIdWithActorRef, pickup: MobilityRequest, dropoff: MobilityRequest)
       extends RVGraphNode {
     override def getId: String = person.personId.toString
+    override def toString: String = s"Person:${person.personId}|Pickup:$pickup|Dropoff:$dropoff"
   }
   // Ride Hail vehicles, capacity and their predefined schedule
-  case class VehicleAndSchedule(vehicle: BeamVehicle, schedule: List[MobilityRequest], geofence: Option[Geofence])
-      extends RVGraphNode {
-    private val nbOfPassengers: Int = schedule.count(_.tag == Dropoff)
+  case class VehicleAndSchedule(
+                                 vehicle: BeamVehicle,
+                                 schedule: List[MobilityRequest],
+                                 geofence: Option[Geofence],
+                                 seatsAvailable: Int
+                               ) extends RVGraphNode {
+    private val numberOfPassengers: Int = schedule.count(req => req.person.isDefined && req.tag == Dropoff)
     override def getId: String = vehicle.id.toString
-    private val maxOccupancy: Int = vehicle.beamVehicleType.seatingCapacity
-    def getFreeSeats: Int = maxOccupancy - nbOfPassengers
-    def getLastDropoff: MobilityRequest = schedule.head
+    def getNoPassengers: Int = numberOfPassengers
+    def getFreeSeats: Int = seatsAvailable - numberOfPassengers
+    def getRequestWithCurrentVehiclePosition: MobilityRequest = schedule.head
   }
   // Trip that can be satisfied by one or more ride hail vehicle
   case class RideHailTrip(requests: List[CustomerRequest], schedule: List[MobilityRequest])
       extends DefaultEdge
       with RTVGraphNode {
     override def getId: String = requests.foldLeft(s"trip:") { case (c, x) => c + s"$x -> " }
-    val cost: Int = schedule.foldLeft(0) { case (c, r)                     => c + (r.serviceTime - r.time) }
+    val cost: Int = schedule.foldLeft(0) { case (c, r)                     => c + (r.serviceTime - r.baselineNonPooledTime) }
+    override def toString: String =
+      s"${requests.size} requests and this schedule: ${schedule.map(_.toString).mkString("\n")}"
   }
   case class RVGraph(clazz: Class[RideHailTrip])
       extends DefaultUndirectedWeightedGraph[RVGraphNode, RideHailTrip](clazz)

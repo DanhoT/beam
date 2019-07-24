@@ -13,7 +13,7 @@ case object Init extends MobilityRequestTrait { override def toString: String = 
 case class MobilityRequest(
   person: Option[PersonIdWithActorRef],
   activity: Activity,
-  time: Int,
+  baselineNonPooledTime: Int,
   trip: Trip,
   defaultMode: BeamMode,
   tag: MobilityRequestTrait,
@@ -35,6 +35,6 @@ case class MobilityRequest(
       case Some(p) => p.personId.toString
       case None    => "None"
     }
-    s"${formatTime(time)}|$tag|${personid}|${activity.getType}| => ${formatTime(serviceTime)}"
+    s"${formatTime(baselineNonPooledTime)}|$tag|${personid}|${activity.getType}| => ${formatTime(serviceTime)}"
   }
 }

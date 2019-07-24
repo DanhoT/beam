@@ -10,6 +10,7 @@ import beam.agentsim.events.SpaceTime
 import beam.router.BeamRouter.RoutingRequest
 import beam.router.BeamSkimmer
 import beam.router.Modes.BeamMode.CAR
+import beam.sim.vehiclesharing.VehicleManager
 import org.matsim.api.core.v01.Id
 import org.matsim.core.utils.collections.QuadTree
 import org.matsim.vehicles.Vehicle
@@ -168,7 +169,7 @@ class PoolingAlonsoMora(val rideHailManager: RideHailManager)
       )
       import scala.concurrent.duration._
       val assignment = try {
-        Await.result(algo.greedyAssignment(), atMost = 2.minutes)
+        Await.result(algo.greedyAssignment(tick), atMost = 2.minutes)
       } catch {
         case e: TimeoutException =>
 //          rideHailManager.log.error("timeout of AsyncAlonsoMoraAlgForRideHail falling back to synchronous")
@@ -243,9 +244,21 @@ class PoolingAlonsoMora(val rideHailManager: RideHailManager)
       toAllocate.filterNot(_.asPooled).foreach { req =>
         Pooling.serveOneRequest(req, tick, alreadyAllocated, rideHailManager) match {
           case res @ RoutingRequiredToAllocateVehicle(_, routes) =>
+            skimmer.countEventsByTAZ(
+              tick,
+              req.pickUpLocationUTM,
+              Id.create("pooling-alonso-mora", classOf[VehicleManager]),
+              "rd-solo-matched"
+            )
             allocResponses = allocResponses :+ res
             alreadyAllocated = alreadyAllocated + routes.head.streetVehicles.head.id
           case res =>
+            skimmer.countEventsByTAZ(
+              tick,
+              req.pickUpLocationUTM,
+              Id.create("pooling-alonso-mora", classOf[VehicleManager]),
+              "rd-solo-unmatched"
+            )
             allocResponses = allocResponses :+ res
         }
       }
