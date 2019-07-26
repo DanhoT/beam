@@ -5,6 +5,8 @@ import scala.collection.JavaConverters._
 import scala.util.{Failure, Random, Success, Try}
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import beam.agentsim.Resource.ReleaseParkingStall
+import beam.agentsim.agents.vehicles.FuelType.Electricity
+import beam.agentsim.infrastructure.charging.ChargingPointType
 import beam.agentsim.agents.choice.logit.MultinomialLogit
 import beam.agentsim.infrastructure.charging._
 import beam.agentsim.infrastructure.parking._
@@ -41,8 +43,30 @@ class ZonalParkingManager(
 
       val preferredParkingTypes: Seq[ParkingType] = inquiry.activityType match {
         case act if act.equalsIgnoreCase("home") => Seq(ParkingType.Residential, ParkingType.Public)
+        case act if act.equalsIgnoreCase("init") => Seq(ParkingType.Residential, ParkingType.Public)
         case act if act.equalsIgnoreCase("work") => Seq(ParkingType.Workplace, ParkingType.Public)
-        case _                                   => Seq(ParkingType.Public)
+        case act if act.equalsIgnoreCase("charge") =>
+          Seq(ParkingType.Workplace, ParkingType.Public, ParkingType.Residential)
+        case _ => Seq(ParkingType.Public)
+      }
+
+      val returnSpotsWithChargers: Boolean = inquiry.activityType.toLowerCase match {
+        case "charge" => true
+        case "init"   => false
+        case _ =>
+          inquiry.vehicleType match {
+            case Some(vehicleType) =>
+              vehicleType.beamVehicleType.primaryFuelType match {
+                case Electricity => true
+                case _           => false
+              }
+            case _ => false
+          }
+      }
+
+      val returnSpotsWithoutChargers: Boolean = inquiry.activityType.toLowerCase match {
+        case "charge" => false
+        case _        => true
       }
 
       // performs a concentric ring search from the destination to find a parking stall, and creates it
@@ -59,6 +83,8 @@ class ZonalParkingManager(
         tazTreeMap.tazQuadTree,
         geo.distUTMInMeters,
         rand,
+        returnSpotsWithChargers,
+        returnSpotsWithoutChargers,
         boundingBox
       ) match {
         case Some(result) =>
@@ -186,5 +212,106 @@ object ZonalParkingManager extends LazyLogging {
       new Random(seed)
     }
     Props(ZonalParkingManager(beamConfig, tazTreeMap, geo, random, boundingBox))
+  }
+
+  /**
+    * looks for the nearest ParkingZone that meets the agent's needs
+    * @param searchStartRadius small radius describing a ring shape
+    * @param searchMaxRadius larger radius describing a ring shape
+    * @param destinationUTM coordinates of this request
+    * @param parkingDuration duration requested for this parking, used to calculate cost in ranking
+    * @param parkingTypes types of parking this request is interested in
+    * @param utilityFunction a utility function for parking alternatives
+    * @param searchTree nested map structure assisting search for parking within a TAZ and by parking type
+    * @param stalls collection of all parking alternatives
+    * @param tazQuadTree lookup of all TAZs in this simulation
+    * @param random random generator used to sample a location from the TAZ for this stall
+    * @return a stall from the found ParkingZone, or a ParkingStall.DefaultStall
+    */
+  def incrementalParkingZoneSearch(
+    searchStartRadius: Double,
+    searchMaxRadius: Double,
+    destinationUTM: Location,
+    valueOfTime: Double,
+    parkingDuration: Double,
+    parkingTypes: Seq[ParkingType],
+    utilityFunction: MultinomialLogit[ParkingZoneSearch.ParkingAlternative, String],
+    searchTree: ParkingZoneSearch.ZoneSearch[TAZ],
+    stalls: Array[ParkingZone],
+    tazQuadTree: QuadTree[TAZ],
+    distanceFunction: (Coord, Coord) => Double,
+    random: Random,
+    returnSpotsWithChargers: Boolean,
+    returnSpotsWithoutChargers: Boolean,
+    boundingBox: Envelope
+  ): (ParkingZone, ParkingStall) = {
+
+    @tailrec
+    def _search(thisInnerRadius: Double, thisOuterRadius: Double): Option[(ParkingZone, ParkingStall)] = {
+      if (thisInnerRadius > searchMaxRadius) None
+      else {
+        val tazDistance: Map[TAZ, Double] =
+          tazQuadTree
+            .getRing(destinationUTM.getX, destinationUTM.getY, thisInnerRadius, thisOuterRadius)
+            .asScala
+            .map { taz =>
+              (taz, GeoUtils.distFormula(taz.coord, destinationUTM))
+            }
+            .toMap
+        val tazList: List[TAZ] = tazDistance.keys.toList
+
+        ParkingZoneSearch.find(
+          destinationUTM,
+          valueOfTime,
+          parkingDuration,
+          utilityFunction,
+          tazList,
+          parkingTypes,
+          searchTree,
+          stalls,
+          distanceFunction,
+          random,
+          returnSpotsWithChargers,
+          returnSpotsWithoutChargers
+        ) match {
+          case Some(
+              ParkingZoneSearch.ParkingSearchResult(
+                bestTAZ,
+                bestParkingType,
+                bestParkingZone,
+                bestCoord,
+                bestRankingValue
+              )
+              ) =>
+            val stallPrice: Double =
+              bestParkingZone.pricingModel
+                .map { PricingModel.evaluateParkingTicket(_, parkingDuration.toInt) }
+                .getOrElse(DefaultParkingPrice)
+
+            // create a new stall instance. you win!
+            val newStall = ParkingStall(
+              bestTAZ.tazId,
+              bestParkingZone.parkingZoneId,
+              bestCoord,
+              stallPrice,
+              bestParkingZone.chargingPointType,
+              bestParkingZone.pricingModel,
+              bestParkingType
+            )
+
+            Some { (bestParkingZone, newStall) }
+          case None =>
+            _search(thisOuterRadius, thisOuterRadius * SearchFactor)
+        }
+      }
+    }
+
+    _search(0, searchStartRadius) match {
+      case Some(result) =>
+        result
+      case None =>
+        val newStall = ParkingStall.lastResortStall(boundingBox, random)
+        (ParkingZone.DefaultParkingZone, newStall)
+    }
   }
 }

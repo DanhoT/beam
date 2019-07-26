@@ -171,10 +171,20 @@ object ParkingZoneSearch {
     tree: ZoneSearch[TAZ],
     parkingZones: Array[ParkingZone],
     distanceFunction: (Coord, Coord) => Double,
-    random: Random
+    random: Random,
+    returnSpotsWithChargers: Boolean,
+    returnSpotsWithoutChargers: Boolean
   ): Option[ParkingSearchResult] = {
-    val found = findParkingZones(destinationUTM, tazList, parkingTypes, tree, parkingZones, random)
-    //    takeBestByRanking(destinationUTM, valueOfTime, parkingDuration, found, utilityFunction, distanceFunction)
+    val found = findParkingZones(
+      destinationUTM,
+      tazList,
+      parkingTypes,
+      tree,
+      parkingZones,
+      random,
+      returnSpotsWithChargers,
+      returnSpotsWithoutChargers
+    )
     takeBestBySampling(
       found,
       destinationUTM,
@@ -203,7 +213,9 @@ object ParkingZoneSearch {
     parkingTypes: Seq[ParkingType],
     tree: ZoneSearch[TAZ],
     parkingZones: Array[ParkingZone],
-    random: Random
+    random: Random,
+    returnSpotsWithChargers: Boolean,
+    returnSpotsWithoutChargers: Boolean
   ): Seq[ParkingAlternative] = {
 
     // conduct search (toList required to combine Option and List monads)
@@ -213,7 +225,12 @@ object ParkingZoneSearch {
       parkingType         <- parkingTypes
       parkingZoneIds      <- parkingTypesSubtree.get(parkingType).toList
       parkingZoneId       <- parkingZoneIds
-      if parkingZones(parkingZoneId).stallsAvailable > 0
+      if parkingZones(parkingZoneId).stallsAvailable > 0 && canThisCarParkHere(
+        parkingZones(parkingZoneId),
+        parkingType,
+        returnSpotsWithChargers,
+        returnSpotsWithoutChargers
+      )
     } yield {
       // get the zone
       Try {
@@ -227,6 +244,18 @@ object ParkingZoneSearch {
         case Failure(e) =>
           throw new IndexOutOfBoundsException(s"Attempting to access ParkingZone with index $parkingZoneId failed.\n$e")
       }
+    }
+  }
+
+  def canThisCarParkHere(
+    parkingZone: ParkingZone,
+    parkingType: ParkingType,
+    returnSpotsWithChargers: Boolean,
+    returnSpotsWithoutChargers: Boolean
+  ): Boolean = {
+    parkingZone.chargingPointType match {
+      case Some(_) => returnSpotsWithChargers
+      case None    => returnSpotsWithoutChargers
     }
   }
 
