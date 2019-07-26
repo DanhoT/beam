@@ -23,13 +23,6 @@ class PoolingAlonsoMora(val rideHailManager: RideHailManager)
 
   val tempScheduleStore: mutable.Map[Int, List[MobilityRequest]] = mutable.Map()
 
-  val spatialPoolCustomerReqs: QuadTree[CustomerRequest] = new QuadTree[CustomerRequest](
-    rideHailManager.activityQuadTreeBounds.minx,
-    rideHailManager.activityQuadTreeBounds.miny,
-    rideHailManager.activityQuadTreeBounds.maxx,
-    rideHailManager.activityQuadTreeBounds.maxy
-  )
-
   val defaultBeamVehilceTypeId = Id.create(
     rideHailManager.beamServices.beamConfig.beam.agentsim.agents.rideHail.initialization.procedural.vehicleTypeId,
     classOf[BeamVehicleType]
@@ -148,7 +141,12 @@ class PoolingAlonsoMora(val rideHailManager: RideHailManager)
           )
         )
 
-      spatialPoolCustomerReqs.clear()
+      val spatialPoolCustomerReqs: QuadTree[CustomerRequest] = new QuadTree[CustomerRequest](
+        rideHailManager.activityQuadTreeBounds.minx,
+        rideHailManager.activityQuadTreeBounds.miny,
+        rideHailManager.activityQuadTreeBounds.maxx,
+        rideHailManager.activityQuadTreeBounds.maxy
+      )
       poolCustomerReqs.foreach { d =>
         spatialPoolCustomerReqs.put(d.pickup.activity.getCoord.getX, d.pickup.activity.getCoord.getY, d)
       }

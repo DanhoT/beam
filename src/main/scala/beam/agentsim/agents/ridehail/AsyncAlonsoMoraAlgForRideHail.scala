@@ -156,6 +156,7 @@ class AsyncAlonsoMoraAlgForRideHail(
       }
       //skimByTazId(supply.filter(_.vehicle.toStreetVehicle.locationUTM != null).map(_.vehicle.toStreetVehicle.locationUTM.loc), tick, "available-vehicles")
       skimByTazId(spatialDemand.values().asScala.map(_.pickup.activity.getCoord), tick, "pooling-requests")
+      skimByTazId(greedyAssignmentList.flatMap(_._1.requests.map(_.pickup.activity.getCoord)), tick, s"matched-pooling-requests")
       skimAssignmentList(greedyAssignmentList, tick, 1)
       skimAssignmentList(greedyAssignmentList, tick, 2)
       skimAssignmentList(greedyAssignmentList, tick, 3)
