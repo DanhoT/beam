@@ -140,7 +140,8 @@ class FastHouseholdCAVScheduling(
       if (cavSchedule.occupancy >= cav.beamVehicleType.seatingCapacity)
         return None
 
-      val sortedRequests = (cavSchedule.schedule ++ requests).filter(_.tag != Relocation).sortBy(_.baselineNonPooledTime)
+      val sortedRequests =
+        (cavSchedule.schedule ++ requests).filter(_.tag != Relocation).sortBy(_.baselineNonPooledTime)
       val startRequest = sortedRequests.head
       val newHouseholdSchedule = MListBuffer(startRequest.copy())
       var newHouseholdScheduleCost = householdScheduleCost.copy()

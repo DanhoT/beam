@@ -223,18 +223,18 @@ object AlonsoMoraPoolingAlgForRideHail {
     import scala.collection.mutable.{ListBuffer => MListBuffer}
     val newPoolingList = MListBuffer(sortedRequests.head.copy())
     sortedRequests.drop(1).foreach { curReq =>
-        val prevReq = newPoolingList.last
-        val travelTime = getTimeDistanceAndCost(prevReq, curReq, beamServices).time
-        val serviceTime = prevReq.serviceTime + travelTime
-        val delay = curReq.tag match {
-          case Dropoff => timeWindow(Pickup) + timeWindow(Dropoff) * travelTime
-          case _ => timeWindow(curReq.tag)
-        }
-        if (serviceTime <= curReq.baselineNonPooledTime + delay) {
-          newPoolingList.append(curReq.copy(serviceTime = serviceTime))
-        } else {
-          return None
-        }
+      val prevReq = newPoolingList.last
+      val travelTime = getTimeDistanceAndCost(prevReq, curReq, beamServices).time
+      val serviceTime = prevReq.serviceTime + travelTime
+      val delay = curReq.tag match {
+        case Dropoff => timeWindow(Pickup) + timeWindow(Dropoff) * travelTime
+        case _       => timeWindow(curReq.tag)
+      }
+      if (serviceTime <= curReq.baselineNonPooledTime + delay) {
+        newPoolingList.append(curReq.copy(serviceTime = serviceTime))
+      } else {
+        return None
+      }
     }
     Some(newPoolingList.toList)
   }
@@ -327,11 +327,11 @@ object AlonsoMoraPoolingAlgForRideHail {
   }
   // Ride Hail vehicles, capacity and their predefined schedule
   case class VehicleAndSchedule(
-                                 vehicle: BeamVehicle,
-                                 schedule: List[MobilityRequest],
-                                 geofence: Option[Geofence],
-                                 seatsAvailable: Int
-                               ) extends RVGraphNode {
+    vehicle: BeamVehicle,
+    schedule: List[MobilityRequest],
+    geofence: Option[Geofence],
+    seatsAvailable: Int
+  ) extends RVGraphNode {
     private val numberOfPassengers: Int = schedule.count(req => req.person.isDefined && req.tag == Dropoff)
     override def getId: String = vehicle.id.toString
     def getNoPassengers: Int = numberOfPassengers

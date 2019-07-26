@@ -242,20 +242,22 @@ class PoolingAlonsoMora(val rideHailManager: RideHailManager)
       }
       // Now satisfy the solo customers
       toAllocate.filterNot(_.asPooled).foreach { req =>
+        val taz = rideHailManager.beamServices.beamScenario.tazTreeMap
+          .getTAZ(req.pickUpLocationUTM.getX, req.pickUpLocationUTM.getY)
         Pooling.serveOneRequest(req, tick, alreadyAllocated, rideHailManager) match {
           case res @ RoutingRequiredToAllocateVehicle(_, routes) =>
-            skimmer.countEventsByTAZ(
+            skimmer.countEvents(
               tick,
-              req.pickUpLocationUTM,
+              taz.tazId,
               Id.create("pooling-alonso-mora", classOf[VehicleManager]),
               "rd-solo-matched"
             )
             allocResponses = allocResponses :+ res
             alreadyAllocated = alreadyAllocated + routes.head.streetVehicles.head.id
           case res =>
-            skimmer.countEventsByTAZ(
+            skimmer.countEvents(
               tick,
-              req.pickUpLocationUTM,
+              taz.tazId,
               Id.create("pooling-alonso-mora", classOf[VehicleManager]),
               "rd-solo-unmatched"
             )

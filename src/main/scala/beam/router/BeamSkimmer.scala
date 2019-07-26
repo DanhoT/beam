@@ -77,7 +77,7 @@ class BeamSkimmer @Inject()(
     } else {
       TrieMap.empty
     }
-    */
+     */
     TrieMap.empty
   }
 
@@ -547,14 +547,12 @@ class BeamSkimmer @Inject()(
     label: Label,
     count: Int = 1
   ): Unit = {
-    if (curBin > trackSkimsPlusTS) trackSkimsPlusTS = curBin
-    val key = (trackSkimsPlusTS, tazId, vehicleManager, label)
+    val key = (curBin, tazId, vehicleManager, label)
     skimsPlus.put(key, skimsPlus.getOrElse(key, 0.0) + count.toDouble)
   }
 
   def addValue(curBin: Int, tazId: Id[TAZ], vehicleManager: Id[VehicleManager], label: Label, value: Double) = {
-    if (curBin > trackSkimsPlusTS) trackSkimsPlusTS = curBin
-    val key = (trackSkimsPlusTS, tazId, vehicleManager, label)
+    val key = (curBin, tazId, vehicleManager, label)
     skimsPlus.put(key, skimsPlus.getOrElse(key, 0.0) + value)
   }
 
