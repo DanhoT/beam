@@ -287,6 +287,7 @@ class RideHailManager(
   private val parkingInquiryCache = collection.mutable.HashMap[Int, RideHailAgentLocation]()
   private val pendingAgentsSentToPark = collection.mutable.Map[Id[Vehicle], ParkingStall]()
   private val cachedNotifyVehicleIdle = collection.mutable.Map[Id[_], NotifyVehicleIdle]()
+  val doNotUseInAllocation = collection.mutable.Set[Id[_]]()
 
   // Tracking Inquiries and Reservation Requests
   val inquiryIdToInquiryAndResponse: mutable.Map[Int, (RideHailRequest, SingleOccupantQuoteAndPoolingInfo)] =
@@ -709,16 +710,18 @@ class RideHailManager(
       modifyPassengerScheduleManager.sendNewPassengerScheduleToVehicle(passengerSchedule, rideHailAgent, tick)
 
     case reply @ InterruptedWhileWaitingToDrive(_, vehicleId, tick) =>
+      // It's too complicated to modify these vehicles, it's also rare so we ignore them
+      doNotUseInAllocation.add(vehicleId)
       modifyPassengerScheduleManager.handleInterruptReply(reply)
       updateLatestObservedTick(vehicleId, tick)
       if (currentlyProcessingTimeoutTrigger.isDefined && modifyPassengerScheduleManager.allInterruptConfirmationsReceived)
-        findAllocationsAndProcess(tick)
+        findAllocationsAndProcess(modifyPassengerScheduleManager.getCurrentTick.get)
 
     case reply @ InterruptedWhileOffline(_, vehicleId, tick) =>
       modifyPassengerScheduleManager.handleInterruptReply(reply)
       updateLatestObservedTick(vehicleId, tick)
       if (currentlyProcessingTimeoutTrigger.isDefined && modifyPassengerScheduleManager.allInterruptConfirmationsReceived)
-        findAllocationsAndProcess(tick)
+        findAllocationsAndProcess(modifyPassengerScheduleManager.getCurrentTick.get)
 
     case reply @ InterruptedWhileIdle(interruptId, vehicleId, tick) =>
       if (pendingAgentsSentToPark.contains(vehicleId)) {
@@ -729,7 +732,7 @@ class RideHailManager(
         // Make sure we take away passenger schedule from RHA Location
         vehicleManager.makeAvailable(vehicleManager.getRideHailAgentLocation(vehicleId).copy(currentPassengerSchedule = None, currentPassengerScheduleIndex = None))
         if (currentlyProcessingTimeoutTrigger.isDefined && modifyPassengerScheduleManager.allInterruptConfirmationsReceived)
-          findAllocationsAndProcess(tick)
+          findAllocationsAndProcess(modifyPassengerScheduleManager.getCurrentTick.get)
       }
 
     case reply @ InterruptedWhileDriving(
@@ -748,7 +751,7 @@ class RideHailManager(
         updatePassengerSchedule(vehicleId, interruptedPassengerSchedule, currentPassengerScheduleIndex)
         updateLatestObservedTick(vehicleId, tick)
         if (currentlyProcessingTimeoutTrigger.isDefined && modifyPassengerScheduleManager.allInterruptConfirmationsReceived)
-          findAllocationsAndProcess(tick)
+          findAllocationsAndProcess(modifyPassengerScheduleManager.getCurrentTick.get)
       }
 
 //    case ParkingInquiryResponse(None, requestId) =>
@@ -1388,6 +1391,7 @@ class RideHailManager(
     }
     cachedNotifyVehicleIdle.clear()
     currentlyProcessingTimeoutTrigger = None
+    doNotUseInAllocation.clear()
     unstashAll()
   }
 
