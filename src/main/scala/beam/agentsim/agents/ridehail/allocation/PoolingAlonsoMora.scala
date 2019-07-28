@@ -186,6 +186,9 @@ class PoolingAlonsoMora(val rideHailManager: RideHailManager)
 
       assignment.foreach {
         case (theTrip, vehicleAndSchedule, cost) =>
+          if(theTrip.requests.exists(s => s.person.personId.toString == "1464105")){
+            print("ok")
+          }
           alreadyAllocated = alreadyAllocated + vehicleAndSchedule.vehicle.id
           var newRideHailRequest: Option[RideHailRequest] = None
           var scheduleToCache: List[MobilityRequest] = List()
@@ -228,6 +231,14 @@ class PoolingAlonsoMora(val rideHailManager: RideHailManager)
               }
             }
             .toList
+          val coord = newRideHailRequest.get.pickUpLocationUTM
+          skimmer.countEvents(
+            tick,
+            rideHailManager.beamServices.beamScenario.tazTreeMap.getTAZ(coord.getX, coord.getY).tazId,
+            Id.create("pooling-alonso-mora", classOf[VehicleManager]),
+            "tobeRouted-customer-"+newRideHailRequest.get.customer.personId,
+            count = 1
+          )
           allocResponses = allocResponses :+ RoutingRequiredToAllocateVehicle(newRideHailRequest.get, rReqs)
           tempScheduleStore.put(newRideHailRequest.get.requestId, scheduleToCache :+ theTrip.schedule.last)
       }
