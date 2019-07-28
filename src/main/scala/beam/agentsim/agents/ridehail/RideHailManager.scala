@@ -21,11 +21,7 @@ import beam.agentsim.agents.ridehail.RideHailAgent._
 import beam.agentsim.agents.ridehail.RideHailManager._
 import beam.agentsim.agents.ridehail.RideHailVehicleManager.RideHailAgentLocation
 import beam.agentsim.agents.ridehail.allocation._
-import beam.agentsim.agents.vehicles.AccessErrorCodes.{
-  CouldNotFindRouteToCustomer,
-  DriverNotFoundError,
-  RideHailVehicleTakenError
-}
+import beam.agentsim.agents.vehicles.AccessErrorCodes.{CouldNotFindRouteToCustomer, DriverNotFoundError, RideHailVehicleTakenError}
 import beam.agentsim.agents.vehicles.EnergyEconomyAttributes.Powertrain
 import beam.agentsim.agents.vehicles.VehicleProtocol.StreetVehicle
 import beam.agentsim.agents.vehicles.{PassengerSchedule, _}
@@ -43,6 +39,7 @@ import beam.router.{BeamRouter, BeamSkimmer, RouteHistory}
 import beam.sim.RideHailFleetInitializer.RideHailAgentInputData
 import beam.sim._
 import beam.sim.vehicles.VehiclesAdjustment
+import beam.sim.vehiclesharing.VehicleManager
 import beam.utils._
 import beam.utils.logging.LogActorState
 import beam.utils.matsim_conversion.ShapeUtils.QuadTreeBounds
@@ -616,6 +613,14 @@ class RideHailManager(
 
       // If any response contains no RIDE_HAIL legs, then the router failed
       if (responses.exists(!_.itineraries.exists(_.tripClassifier.equals(RIDE_HAIL)))) {
+        val coord = request.pickUpLocationUTM
+        beamSkimmer.countEvents(
+          request.departAt,
+          beamServices.beamScenario.tazTreeMap.getTAZ(coord.getX, coord.getY).tazId,
+          Id.create("pooling-alonso-mora", classOf[VehicleManager]),
+          "noRidehailLeg-customer-"+request.customer.personId,
+          count = 1
+        )
         log.debug(
           "Router could not find route to customer person={} for requestId={}",
           request.customer.personId,
