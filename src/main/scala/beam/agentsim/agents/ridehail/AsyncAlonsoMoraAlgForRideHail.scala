@@ -173,6 +173,16 @@ class AsyncAlonsoMoraAlgForRideHail(
         .map(scheduleTime => scheduleTime.last - scheduleTime.head)
         .sum
       skimByValue(totTime2, tick, "evtt-pool-solo")
+      greedyAssignmentList.flatMap(_._1.requests).foreach { req =>
+        val coord = req.pickup.activity.getCoord
+        skimmer.countEvents(
+          tick,
+          beamServices.beamScenario.tazTreeMap.getTAZ(coord.getX, coord.getY).tazId,
+          Id.create("pooling-alonso-mora", classOf[VehicleManager]),
+          "customer-"+req.person.personId,
+          count = 1
+        )
+      }
       greedyAssignmentList.toList
     }
   }

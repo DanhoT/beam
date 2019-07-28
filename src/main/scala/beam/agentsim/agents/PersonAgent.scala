@@ -31,6 +31,7 @@ import beam.router.model.{EmbodiedBeamLeg, EmbodiedBeamTrip}
 import beam.router.osm.TollCalculator
 import beam.router.{BeamSkimmer, RouteHistory, TravelTimeObserved}
 import beam.sim.population.AttributesOfIndividual
+import beam.sim.vehiclesharing.VehicleManager
 import beam.sim.{BeamScenario, BeamServices, Geofence}
 import com.conveyal.r5.transit.TransportNetwork
 import com.vividsolutions.jts.geom.Envelope
@@ -414,6 +415,14 @@ class PersonAgent(
     data: BasePersonData
   ): State = {
     logDebug(s"replanning because ${error.errorCode}")
+    val coord = response.request.pickUpLocationUTM
+    beamSkimmer.countEvents(
+      response.request.departAt,
+      beamServices.beamScenario.tazTreeMap.getTAZ(coord.getX, coord.getY).tazId,
+      Id.create("pooling-alonso-mora", classOf[VehicleManager]),
+      "customer-"+response.request.customer.personId,
+      count = 1
+    )
     val tick = _currentTick.getOrElse(response.request.departAt)
     val replanningReason = getReplanningReasonFrom(data, error.errorCode.entryName)
     eventsManager.processEvent(new ReplanningEvent(tick, Id.createPersonId(id), replanningReason))
