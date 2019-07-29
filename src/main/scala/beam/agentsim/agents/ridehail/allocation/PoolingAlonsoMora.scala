@@ -208,6 +208,14 @@ class PoolingAlonsoMora(val rideHailManager: RideHailManager)
                 removeRequestFromBuffer(customerIdToReqs(orig.person.get.personId))
               }
               if (rideHailManager.beamServices.geo.distUTMInMeters(orig.activity.getCoord, dest.activity.getCoord) < rideHailManager.beamServices.beamConfig.beam.agentsim.thresholdForWalkingInMeters) {
+                val coord = newRideHailRequest.get.pickUpLocationUTM
+                skimmer.countEvents(
+                  tick,
+                  rideHailManager.beamServices.beamScenario.tazTreeMap.getTAZ(coord.getX, coord.getY).tazId,
+                  Id.create("pooling-alonso-mora", classOf[VehicleManager]),
+                  "toWalk-customer-"+newRideHailRequest.get.customer.personId,
+                  count = 1
+                )
                 scheduleToCache = scheduleToCache :+ orig
                 None
               } else {
