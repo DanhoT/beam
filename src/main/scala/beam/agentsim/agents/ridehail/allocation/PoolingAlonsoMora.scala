@@ -26,13 +26,6 @@ class PoolingAlonsoMora(val rideHailManager: RideHailManager)
   val randomRepositioning: RandomRepositioning = new RandomRepositioning(rideHailManager)
   val tempScheduleStore: mutable.Map[Int, List[MobilityRequest]] = mutable.Map()
 
-  val spatialPoolCustomerReqs: QuadTree[CustomerRequest] = new QuadTree[CustomerRequest](
-    rideHailManager.activityQuadTreeBounds.minx,
-    rideHailManager.activityQuadTreeBounds.miny,
-    rideHailManager.activityQuadTreeBounds.maxx,
-    rideHailManager.activityQuadTreeBounds.maxy
-  )
-
   val defaultBeamVehilceTypeId = Id.create(
     rideHailManager.beamServices.beamConfig.beam.agentsim.agents.rideHail.initialization.procedural.vehicleTypeId,
     classOf[BeamVehicleType]
@@ -206,7 +199,12 @@ class PoolingAlonsoMora(val rideHailManager: RideHailManager)
 //          )
 //        }
 
-      spatialPoolCustomerReqs.clear()
+      val spatialPoolCustomerReqs: QuadTree[CustomerRequest] = new QuadTree[CustomerRequest](
+        rideHailManager.activityQuadTreeBounds.minx,
+        rideHailManager.activityQuadTreeBounds.miny,
+        rideHailManager.activityQuadTreeBounds.maxx,
+        rideHailManager.activityQuadTreeBounds.maxy
+      )
       poolCustomerReqs.foreach { d =>
         spatialPoolCustomerReqs.put(d.pickup.activity.getCoord.getX, d.pickup.activity.getCoord.getY, d)
       }
@@ -305,6 +303,14 @@ class PoolingAlonsoMora(val rideHailManager: RideHailManager)
                 }
               }
               .toList
+            val coord = newRideHailRequest.get.pickUpLocationUTM
+            skimmer.countEvents(
+              tick,
+              rideHailManager.beamServices.beamScenario.tazTreeMap.getTAZ(coord.getX, coord.getY).tazId,
+              Id.create("pooling-alonso-mora", classOf[VehicleManager]),
+              "tobeRouted-customer-"+newRideHailRequest.get.customer.personId,
+              count = 1
+            )
             allocResponses = allocResponses :+ RoutingRequiredToAllocateVehicle(newRideHailRequest.get, rReqs)
             tempScheduleStore.put(newRideHailRequest.get.requestId, scheduleToCache :+ theTrip.schedule.last)
 
@@ -319,24 +325,26 @@ class PoolingAlonsoMora(val rideHailManager: RideHailManager)
       }
       // Now satisfy the solo customers
       toAllocate.filterNot(_.asPooled).foreach { req =>
+        val taz = rideHailManager.beamServices.beamScenario.tazTreeMap
+          .getTAZ(req.pickUpLocationUTM.getX, req.pickUpLocationUTM.getY)
         Pooling.serveOneRequest(req, tick, alreadyAllocated, rideHailManager) match {
           case res @ RoutingRequiredToAllocateVehicle(_, routes) =>
-            allocResponses = allocResponses :+ res
-            alreadyAllocated = alreadyAllocated + routes.head.streetVehicles.head.id
-            skimmer.countEventsByTAZ(
+            skimmer.countEvents(
               tick,
-              req.pickUpLocationUTM,
+              taz.tazId,
               Id.create("pooling-alonso-mora", classOf[VehicleManager]),
               "rd-solo-matched"
             )
-          case res =>
             allocResponses = allocResponses :+ res
-            skimmer.countEventsByTAZ(
+            alreadyAllocated = alreadyAllocated + routes.head.streetVehicles.head.id
+          case res =>
+            skimmer.countEvents(
               tick,
-              req.pickUpLocationUTM,
+              taz.tazId,
               Id.create("pooling-alonso-mora", classOf[VehicleManager]),
               "rd-solo-unmatched"
             )
+            allocResponses = allocResponses :+ res
         }
       }
     }
